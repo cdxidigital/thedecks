@@ -5,17 +5,10 @@ import { useMemo, useState } from 'react'
 import { Bot, Check, ChevronDown, Cloud, Disc3, Headphones, Library, ListMusic, Mic2, Pause, Play, Radio, Search, SlidersHorizontal, Sparkles, WandSparkles, Wifi, X } from 'lucide-react'
 
 type Track = { title: string; artist: string; bpm: number; key: string; energy: number; time: string; source: string; color: 'cyan' | 'amber' }
-type DeckState = { track: Track; playing: boolean; sync: boolean; loop: number; pitch: number }
+type DeckState = { track: Track | null; playing: boolean; sync: boolean; loop: number; pitch: number }
 
-const tracks: Track[] = [
-  { title: 'Neon Current', artist: 'Mira Sol', bpm: 124, key: '8A', energy: 82, time: '5:42', source: 'Local', color: 'cyan' },
-  { title: 'After Hours Signal', artist: 'North Phase', bpm: 126, key: '9A', energy: 88, time: '6:18', source: 'Beatport', color: 'amber' },
-  { title: 'Glass Cities', artist: 'Aiko Drift', bpm: 122, key: '8B', energy: 71, time: '4:57', source: 'TIDAL', color: 'cyan' },
-  { title: 'Low Orbit', artist: 'Vanta & Rue', bpm: 126, key: '9A', energy: 91, time: '5:33', source: 'SoundCloud', color: 'amber' },
-  { title: 'Parallel Motion', artist: 'Kinetic Bloom', bpm: 125, key: '7A', energy: 76, time: '6:04', source: 'Dropbox', color: 'cyan' },
-]
-
-const initialDecks: DeckState[] = tracks.slice(0, 4).map((track, i) => ({ track, playing: i === 0, sync: i < 2, loop: 8, pitch: i === 0 ? 0 : -0.8 }))
+const emptyTrack: Track = { title: '(Empty)', artist: '(No track loaded)', bpm: 120, key: '1A', energy: 0, time: '0:00', source: '', color: 'cyan' }
+const initialDecks: DeckState[] = Array(4).fill(null).map(() => ({ track: null, playing: false, sync: false, loop: 8, pitch: 0 }))
 
 function Waveform({ accent, compact = false }: { accent: string; compact?: boolean }) {
   const bars = [18, 34, 23, 46, 62, 38, 55, 29, 71, 48, 33, 64, 79, 51, 27, 44, 68, 37, 58, 75, 42, 25, 61, 49, 73, 35, 56, 82, 46, 30, 66, 39, 76, 53, 28, 63, 47, 70, 41, 59]
@@ -27,20 +20,22 @@ function Knob({ label, value = 0 }: { label: string; value?: number }) {
 }
 
 function Deck({ index, state, compact, onChange }: { index: number; state: DeckState; compact: boolean; onChange: (next: DeckState) => void }) {
-  const accent = state.track.color === 'cyan' ? 'var(--primary)' : 'var(--deck-b)'
+  const track = state.track || emptyTrack
+  const accent = track.color === 'cyan' ? 'var(--primary)' : 'var(--deck-b)'
+  const isEmpty = !state.track
   return <section className="panel overflow-hidden" style={{ '--deck': accent } as React.CSSProperties} aria-label={`Deck ${String.fromCharCode(65 + index)}`}>
     <header className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2"><b className="deck-letter">{String.fromCharCode(65 + index)}</b><div className="min-w-0"><h2 className="truncate text-xs font-bold">{state.track.title}</h2><p className="truncate text-[10px] text-muted-foreground">{state.track.artist}</p></div></div>
-      <div className="text-right"><b className="font-mono text-lg leading-none" style={{ color: accent }}>{state.track.bpm.toFixed(2)}</b><p className="text-[9px] text-muted-foreground">{state.track.key} · {state.pitch > 0 ? '+' : ''}{state.pitch}%</p></div>
+      <div className="flex min-w-0 items-center gap-2"><b className="deck-letter">{String.fromCharCode(65 + index)}</b><div className="min-w-0"><h2 className="truncate text-xs font-bold">{track.title}</h2><p className="truncate text-[10px] text-muted-foreground">{track.artist}</p></div></div>
+      <div className="text-right"><b className="font-mono text-lg leading-none" style={{ color: accent }}>{track.bpm.toFixed(2)}</b><p className="text-[9px] text-muted-foreground">{track.key} · {state.pitch > 0 ? '+' : ''}{state.pitch}%</p></div>
     </header>
     <div className="relative px-3 pt-2"><Waveform accent={accent} compact={compact} /><div className="mt-1 flex justify-between font-mono text-[9px] text-muted-foreground"><span>02:18.4</span><span>-03:23.6</span></div></div>
     <div className={`flex items-center justify-between gap-2 px-3 ${compact ? 'py-2' : 'py-3'}`}>
-      <button className="transport cue" onClick={() => onChange({ ...state, playing: false })}>CUE</button>
-      <button className="transport play" style={{ color: accent }} onClick={() => onChange({ ...state, playing: !state.playing })} aria-label={state.playing ? 'Pause' : 'Play'}>{state.playing ? <Pause /> : <Play />}</button>
-      <button className={`transport sync ${state.sync ? 'active' : ''}`} onClick={() => onChange({ ...state, sync: !state.sync })}>SYNC</button>
-      <div className="flex items-center gap-1 rounded border bg-muted/30 p-1"><button onClick={() => onChange({ ...state, loop: Math.max(1, state.loop / 2) })}>−</button><b className="w-6 text-center font-mono text-[10px]">{state.loop}</b><button onClick={() => onChange({ ...state, loop: Math.min(32, state.loop * 2) })}>+</button></div>
+      <button className="transport cue" onClick={() => onChange({ ...state, playing: false })} disabled={isEmpty}>CUE</button>
+      <button className="transport play" style={{ color: accent }} onClick={() => onChange({ ...state, playing: !state.playing })} aria-label={state.playing ? 'Pause' : 'Play'} disabled={isEmpty}>{state.playing ? <Pause /> : <Play />}</button>
+      <button className={`transport sync ${state.sync ? 'active' : ''}`} onClick={() => onChange({ ...state, sync: !state.sync })} disabled={isEmpty}>SYNC</button>
+      <div className="flex items-center gap-1 rounded border bg-muted/30 p-1"><button onClick={() => onChange({ ...state, loop: Math.max(1, state.loop / 2) })} disabled={isEmpty}>−</button><b className="w-6 text-center font-mono text-[10px]">{state.loop}</b><button onClick={() => onChange({ ...state, loop: Math.min(32, state.loop * 2) })} disabled={isEmpty}>+</button></div>
     </div>
-    {!compact && <div className="grid grid-cols-4 gap-1 px-3 pb-3">{['HOT CUE','LOOP','STEMS','ROLL'].map((pad,i)=><button key={pad} className={`pad ${i===0?'lit':''}`}><b>{i+1}</b><span>{pad}</span></button>)}</div>}
+    {!compact && <div className="grid grid-cols-4 gap-1 px-3 pb-3">{['HOT CUE','LOOP','STEMS','ROLL'].map((pad,i)=><button key={pad} className={`pad ${i===0 && !isEmpty?'lit':''}`} disabled={isEmpty}><b>{i+1}</b><span>{pad}</span></button>)}</div>}
   </section>
 }
 
@@ -65,13 +60,14 @@ function formatDuration(duration: number | null) {
   return `${minutes}:${String(Math.round(duration % 60)).padStart(2, '0')}`
 }
 
-function RemixStudio({ track, onClose }: { track: Track; onClose: () => void }) {
+function RemixStudio({ track, onClose }: { track: Track | null; onClose: () => void }) {
+  if (!track) return null
   const [rights, setRights] = useState(false)
   const [status, setStatus] = useState<'setup' | 'processing' | 'done' | 'error'>('setup')
   const [genre, setGenre] = useState('UK Garage')
   const [direction, setDirection] = useState('Underground club')
   const [intensity, setIntensity] = useState(68)
-  const [arrangement, setArrangement] = useState<string[]>(['Keep vocals', 'Extend intro'])
+  const [arrangement, setArrangement] = useState<string[]>([])
   const [candidates, setCandidates] = useState<RemixCandidate[]>([])
   const [error, setError] = useState('')
 
@@ -117,21 +113,29 @@ function RemixStudio({ track, onClose }: { track: Track; onClose: () => void }) 
 }
 
 export function DJWorkspace() {
-  const [deckCount, setDeckCount] = useState<2|4>(2), [decks, setDecks] = useState(initialDecks), [query, setQuery] = useState(''), [selected, setSelected] = useState(tracks[1]), [remixOpen, setRemixOpen] = useState(false), [notice, setNotice] = useState('Transition window opens in 24 bars')
-  const filtered = useMemo(() => tracks.filter(t => `${t.title} ${t.artist}`.toLowerCase().includes(query.toLowerCase())), [query])
+  const [deckCount, setDeckCount] = useState<2|4>(2)
+  const [decks, setDecks] = useState(initialDecks)
+  const [tracks, setTracks] = useState<Track[]>([])
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<Track | null>(null)
+  const [remixOpen, setRemixOpen] = useState(false)
+  const [notice, setNotice] = useState('Library is empty. Import tracks to get started.')
+
+  const filtered = useMemo(() => tracks.filter(t => `${t.title} ${t.artist}`.toLowerCase().includes(query.toLowerCase())), [tracks, query])
   const updateDeck = (i:number,next:DeckState) => setDecks(d => d.map((x,j)=>j===i?next:x))
   const loadTrack = (i:number, track:Track) => { updateDeck(i,{...decks[i],track,playing:false}); setNotice(`${track.title} loaded to Deck ${String.fromCharCode(65+i)}`) }
+  
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><span className="brand-mark"><Image src="/decks-4music2-mark.png" width={32} height={32} alt="4{music}2 brand mark" priority /></span><div className="brand-lockup"><b><em>the</em> decks</b><small>BY <strong>4{'{'}MUSIC{'}'}2</strong> · PERFORMANCE OS</small></div></div><nav className="status-row" aria-label="System status"><span><Wifi /> CLOUD SYNCED</span><span><Headphones /> DDJ-FLX10</span><span><Radio /> 48 kHz / 24-bit</span></nav><div className="flex items-center gap-2"><button className="record-button"><i /> REC</button><div className="deck-toggle" aria-label="Deck layout"><button className={deckCount===2?'active':''} onClick={()=>setDeckCount(2)}>2 DECK</button><button className={deckCount===4?'active':''} onClick={()=>setDeckCount(4)}>4 DECK</button></div><b className="clock">23:41</b></div></header>
+    <header className="topbar"><div className="brand"><span className="brand-mark"><Image src="/decks-4music2-mark.png" width={32} height={32} alt="4{music}2 brand mark" priority /></span><div className="brand-lockup"><b><em>the</em> decks</b><small>BY <strong>4{'{'}MUSIC{'}'}2</strong> · PERFORMANCE OS</small></div></div><nav className="status-row" aria-label="System status"><span><Wifi /> READY</span><span><Headphones /> SUNO REMIX</span><span><Radio /> 48 kHz / 24-bit</span></nav><div className="flex items-center gap-2"><button className="record-button"><i /> REC</button><div className="deck-toggle" aria-label="Deck layout"><button className={deckCount===2?'active':''} onClick={()=>setDeckCount(2)}>2 DECK</button><button className={deckCount===4?'active':''} onClick={()=>setDeckCount(4)}>4 DECK</button></div><b className="clock">{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</b></div></header>
     <div className={`performance-grid mode-${deckCount}`}>
       <div className="decks-grid">{decks.slice(0,deckCount).map((d,i)=><Deck key={i} index={i} state={d} compact={deckCount===4} onChange={n=>updateDeck(i,n)} />)}</div><Mixer channels={deckCount}/>
     </div>
     <section className="lower-grid">
-      <aside className="sources"><span className="section-label">SOURCES</span>{[[Library,'Collection','12,480'],[ListMusic,'Playlists','24'],[Cloud,'Cloud Drive',''],[Radio,'Streaming','4']].map(([Icon,label,count],i)=>{const I=Icon as typeof Library;return <button key={label as string} className={i===0?'active':''}><I /><span>{label as string}</span><small>{count as string}</small></button>})}<div className="source-divider"/><p>CONNECTED</p>{['Beatport','TIDAL','SoundCloud'].map(x=><button key={x}><i className="online"/><span>{x}</span></button>)}</aside>
-      <section className="library-panel"><header className="library-header"><div><p className="eyebrow"><Library /> UNIFIED LIBRARY</p><h2>All Tracks</h2></div><label className="search"><Search /><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search tracks, artists, keys…" /></label><button className="secondary-action" onClick={()=>setRemixOpen(true)}><WandSparkles /> Remix</button></header><div className="track-table" role="table"><div className="track-row head" role="row"><span>#</span><span>TITLE</span><span>BPM</span><span>KEY</span><span>ENERGY</span><span>SOURCE</span><span>LOAD</span></div>{filtered.map((t,i)=><div role="row" tabIndex={0} className={`track-row ${selected.title===t.title?'selected':''}`} key={t.title} onClick={()=>setSelected(t)} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&!e.nativeEvent.isComposing&&e.keyCode!==229){e.preventDefault();setSelected(t)}}}><span>{String(i+1).padStart(2,'0')}</span><span><b>{t.title}</b><small>{t.artist} · {t.time}</small></span><span>{t.bpm}</span><span className="key-pill">{t.key}</span><span><i className="energy"><i style={{width:`${t.energy}%`}}/></i></span><span>{t.source}</span><span className="load-actions" onClick={e=>e.stopPropagation()}>{Array.from({length:deckCount}).map((_,d)=><button key={d} onClick={()=>loadTrack(d,t)} aria-label={`Load ${t.title} to Deck ${String.fromCharCode(65+d)}`}>{String.fromCharCode(65+d)}</button>)}</span></div>)}</div></section>
-      <aside className="ai-panel"><header><span><Bot /></span><div><p>PERFORMANCE ASSISTANT</p><b>4music AI is listening</b></div><i /></header><div className="ai-energy"><div className="energy-ring"><b>86</b><small>ENERGY</small></div><div><b>Room is building</b><p>Maintain tension for 32 bars, then lift.</p></div></div><div className="recommendation"><span>NEXT TRACK · 94% FIT</span><h3>Low Orbit</h3><p>Vanta & Rue · 126 BPM · 9A</p><div className="fit-row"><i>KEY +1</i><i>ENERGY +9</i><i>PHRASE ✓</i></div><button onClick={()=>{loadTrack(1,tracks[3]);setNotice('AI recommendation loaded to Deck B')}}>Load to Deck B</button></div><div className="insight"><Sparkles /><p><b>{notice}</b><span>Try a 16-beat loop and cut lows at the next phrase.</span></p></div><button className="ask-ai"><Mic2 /> Ask 4music AI <ChevronDown /></button></aside>
+      <aside className="sources"><span className="section-label">SOURCES</span>{[[Library,'Tracks',tracks.length.toString()],[ListMusic,'Playlists','0'],[Cloud,'Cloud Drive',''],[Radio,'Streaming','0']].map(([Icon,label,count],i)=>{const I=Icon as typeof Library;return <button key={label as string} className={i===0?'active':''}><I /><span>{label as string}</span><small>{count as string}</small></button>})}<div className="source-divider"/><p>STATUS</p><button><i className="online" /><span>Suno Remix API</span></button></aside>
+      <section className="library-panel"><header className="library-header"><div><p className="eyebrow"><Library /> TRACK LIBRARY</p><h2>{tracks.length === 0 ? 'No tracks imported' : `${tracks.length} track${tracks.length === 1 ? '' : 's'}`}</h2></div><label className="search"><Search /><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search tracks, artists, keys…" disabled={tracks.length === 0} /></label><button className="secondary-action" onClick={()=>{if(selected) setRemixOpen(true)}} disabled={!selected}><WandSparkles /> Remix</button></header>{tracks.length === 0 ? <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--muted-foreground)',textAlign:'center',flexDirection:'column',gap:'12px'}}><p style={{margin:0,fontSize:'12px'}}>Import or create tracks to begin</p><small style={{margin:0,color:'var(--muted-foreground)'}}>Add tracks to your library to load them onto decks and generate remixes with Suno AI.</small></div> : <div className="track-table" role="table"><div className="track-row head" role="row"><span>#</span><span>TITLE</span><span>BPM</span><span>KEY</span><span>ENERGY</span><span>SOURCE</span><span>LOAD</span></div>{filtered.map((t,i)=><div role="row" tabIndex={0} className={`track-row ${selected?.title===t.title?'selected':''}`} key={t.title} onClick={()=>setSelected(t)} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&!e.nativeEvent.isComposing&&e.keyCode!==229){e.preventDefault();setSelected(t)}}}><span>{String(i+1).padStart(2,'0')}</span><span><b>{t.title}</b><small>{t.artist} · {t.time}</small></span><span>{t.bpm}</span><span className="key-pill">{t.key}</span><span><i className="energy"><i style={{width:`${t.energy}%`}}/></i></span><span>{t.source}</span><span className="load-actions" onClick={e=>e.stopPropagation()}>{Array.from({length:deckCount}).map((_,d)=><button key={d} onClick={()=>loadTrack(d,t)} aria-label={`Load ${t.title} to Deck ${String.fromCharCode(65+d)}`}>{String.fromCharCode(65+d)}</button>)}</span></div>)}</div>}</section>
+      <aside className="ai-panel"><header><span><Sparkles /></span><div><p>REMIX GENERATOR</p><b>Suno AI Integration</b></div><i /></header><div className="ai-energy"><div className="energy-ring"><b>{selected ? '✓' : '−'}</b><small>{selected ? 'READY' : 'SELECT'}</small></div><div><b>{selected ? 'Track selected' : 'No track selected'}</b><p>{selected ? `${selected.title} is ready to remix.` : 'Pick a track to generate a Suno AI remix.'}</p></div></div>{selected && <div className="recommendation"><span>SELECTED · 100% FIT</span><h3>{selected.title}</h3><p>{selected.artist} · {selected.bpm} BPM · {selected.key}</p><div className="fit-row"><i>METADATA ✓</i><i>STYLE ✓</i><i>READY ✓</i></div><button onClick={()=>setRemixOpen(true)}><WandSparkles /> Generate remix</button></div>}<div className="insight"><Sparkles /><p><b>{notice}</b><span>Generate new interpretations using AI-powered style transfer.</span></p></div></aside>
     </section>
-    <footer><span>CPU <b>18%</b></span><span>AUDIO <b>3.2 ms</b></span><span>DROPOUTS <b>0</b></span><span className="ml-auto">{'4{music}2 Engine'} <b>Online</b></span></footer>
-    {remixOpen && <RemixStudio track={selected} onClose={()=>setRemixOpen(false)} />}
+    <footer><span>VERSION <b>1.0</b></span><span>REMIX <b>ENABLED</b></span><span>TRACKS <b>{tracks.length}</b></span><span className="ml-auto">{'READY FOR DEPLOYMENT'} <b>LIVE</b></span></footer>
+    {remixOpen && selected && <RemixStudio track={selected} onClose={()=>setRemixOpen(false)} />}
   </main>
 }
