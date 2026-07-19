@@ -48,14 +48,71 @@ function Mixer({ channels }: { channels: number }) {
   return <section className="panel flex min-w-48 flex-col px-2 py-3" aria-label="Mixer"><div className="mb-2 flex items-center justify-between"><span className="section-label">MIXER</span><SlidersHorizontal className="size-3 text-muted-foreground" /></div><div className="flex flex-1 justify-around gap-2">{Array.from({ length: channels }).map((_, i) => <div key={i} className="flex flex-1 flex-col items-center gap-2"><span className="channel-dot" style={{ background: i % 2 ? 'var(--deck-b)' : 'var(--primary)' }} /><Knob label="Gain" value={i * 18 - 20} /><Knob label="High" value={10} /><Knob label="Mid" value={-15} /><Knob label="Low" value={25} /><div className="relative flex h-20 w-full justify-center"><input aria-label={`Channel ${i + 1} volume`} type="range" min="0" max="100" defaultValue={i === 0 ? 82 : 72} className="vertical-range" /></div><button className="channel-cue">CUE</button></div>)}</div><div className="mt-2"><label className="flex justify-between text-[9px] text-muted-foreground"><span>A</span><span>CROSSFADER</span><span>B</span></label><input aria-label="Crossfader" type="range" defaultValue="50" className="w-full accent-primary" /></div></section>
 }
 
+type RemixCandidate = {
+  id: string
+  title: string
+  status: string
+  duration: number | null
+  artworkUrl: string | null
+  audioUrl: string | null
+}
+
+const arrangementOptions = ['Keep vocals', 'Extend intro', 'Club outro'] as const
+
+function formatDuration(duration: number | null) {
+  if (!duration) return 'Duration pending'
+  const minutes = Math.floor(duration / 60)
+  return `${minutes}:${String(Math.round(duration % 60)).padStart(2, '0')}`
+}
+
 function RemixStudio({ track, onClose }: { track: Track; onClose: () => void }) {
-  const [rights, setRights] = useState(false), [status, setStatus] = useState<'setup'|'processing'|'done'>('setup')
-  const generate = () => { setStatus('processing'); window.setTimeout(() => setStatus('done'), 1800) }
+  const [rights, setRights] = useState(false)
+  const [status, setStatus] = useState<'setup' | 'processing' | 'done' | 'error'>('setup')
+  const [genre, setGenre] = useState('UK Garage')
+  const [direction, setDirection] = useState('Underground club')
+  const [intensity, setIntensity] = useState(68)
+  const [arrangement, setArrangement] = useState<string[]>(['Keep vocals', 'Extend intro'])
+  const [candidates, setCandidates] = useState<RemixCandidate[]>([])
+  const [error, setError] = useState('')
+
+  const toggleArrangement = (option: string) => {
+    setArrangement(current => current.includes(option) ? current.filter(item => item !== option) : [...current, option])
+  }
+
+  const generate = async () => {
+    if (!rights || status === 'processing') return
+    setStatus('processing')
+    setError('')
+
+    try {
+      const response = await fetch('/api/suno/remix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          track: { title: track.title, artist: track.artist, bpm: track.bpm, key: track.key },
+          genre,
+          direction,
+          intensity,
+          arrangement,
+          rightsConfirmed: rights,
+        }),
+      })
+      const payload = await response.json() as { candidates?: RemixCandidate[]; error?: string }
+      if (!response.ok || !payload.candidates?.length) throw new Error(payload.error || 'Suno did not return a playable interpretation.')
+      setCandidates(payload.candidates)
+      setStatus('done')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The remix request failed. Please retry.')
+      setStatus('error')
+    }
+  }
+
   return <div className="modal-backdrop" role="presentation" onMouseDown={e => e.target === e.currentTarget && onClose()}><section role="dialog" aria-modal="true" aria-labelledby="remix-title" className="remix-modal">
-    <header className="flex items-start justify-between border-b p-5"><div><p className="eyebrow"><WandSparkles /> AI REMIX STUDIO</p><h2 id="remix-title" className="mt-1 text-xl font-bold">Reimagine “{track.title}”</h2><p className="mt-1 text-xs text-muted-foreground">Licensed workflow prototype · Provider-ready for authorized Suno access</p></div><button className="icon-button" onClick={onClose} aria-label="Close Remix Studio"><X /></button></header>
-    {status === 'setup' && <div className="flex flex-col gap-5 p-5"><div className="source-card"><Disc3 /><div><b>{track.title}</b><p>{track.artist} · {track.bpm} BPM · {track.key}</p></div><span>MASTER</span></div><div className="grid grid-cols-2 gap-4"><label className="field">TARGET GENRE<select defaultValue="UK Garage"><option>UK Garage</option><option>Afro House</option><option>Drum & Bass</option><option>Melodic Techno</option></select></label><label className="field">STYLE DIRECTION<select defaultValue="Underground club"><option>Underground club</option><option>Festival peak</option><option>Late-night minimal</option><option>Radio edit</option></select></label></div><label className="field">CREATIVE INTENSITY <span>68%</span><input type="range" defaultValue="68" /></label><div className="grid grid-cols-3 gap-2">{['Keep vocals','Extend intro','Club outro'].map((x,i)=><label className="option" key={x}><input type="checkbox" defaultChecked={i<2}/><span>{x}</span></label>)}</div><label className="rights"><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)}/><span><b>I own or control the required rights.</b><small>I confirm I am authorized to transform this recording and accept responsibility for its use and distribution.</small></span></label><button className="primary-action" disabled={!rights} onClick={generate}><Sparkles /> Generate licensed remix</button></div>}
-    {status === 'processing' && <div className="processing"><span className="orb"><WandSparkles /></span><h3>Reshaping genre and arrangement</h3><p>Separating stems · Mapping structure · Rendering preview</p><div className="progress"><i /></div><small>Prototype simulation — no audio has been uploaded</small></div>}
-    {status === 'done' && <div className="flex flex-col gap-5 p-5"><div className="result-art"><span><Check /></span><div><p>REMIX READY</p><h3>{track.title} · UK Garage Rework</h3><small>126 BPM · 4:32 · F minor</small></div></div><Waveform accent="var(--primary)" /><div className="flex gap-2"><button className="primary-action flex-1"><Play /> Preview</button><button className="secondary-action flex-1">Export draft</button></div><p className="text-center text-[10px] text-muted-foreground">Prototype result. Commercial release requires provider approval and valid music rights.</p></div>}
+    <header className="flex items-start justify-between border-b p-5"><div><p className="eyebrow"><WandSparkles /> SUNO STYLE STUDIO</p><h2 id="remix-title" className="mt-1 text-xl font-bold">Reimagine “{track.title}”</h2><p className="mt-1 text-xs text-muted-foreground">Generate a new interpretation from track metadata and style controls</p></div><button className="icon-button" onClick={onClose} aria-label="Close Remix Studio"><X /></button></header>
+    {status === 'setup' && <div className="flex flex-col gap-5 p-5"><div className="source-card"><Disc3 /><div><b>{track.title}</b><p>{track.artist} · {track.bpm} BPM · {track.key}</p></div><span>REFERENCE</span></div><div className="grid grid-cols-2 gap-4"><label className="field">TARGET GENRE<select value={genre} onChange={event => setGenre(event.target.value)}><option>UK Garage</option><option>Afro House</option><option>Drum & Bass</option><option>Melodic Techno</option></select></label><label className="field">STYLE DIRECTION<select value={direction} onChange={event => setDirection(event.target.value)}><option>Underground club</option><option>Festival peak</option><option>Late-night minimal</option><option>Radio edit</option></select></label></div><label className="field">CREATIVE INTENSITY <span>{intensity}%</span><input type="range" min="0" max="100" value={intensity} onChange={event => setIntensity(Number(event.target.value))} /></label><div className="grid grid-cols-3 gap-2">{arrangementOptions.map(option => <label className="option" key={option}><input type="checkbox" checked={arrangement.includes(option)} onChange={() => toggleArrangement(option)} /><span>{option}</span></label>)}</div><p className="remix-note">The source recording is not uploaded. Suno creates an original track using only the displayed metadata and your style choices.</p><label className="rights"><input type="checkbox" checked={rights} onChange={event => setRights(event.target.checked)} /><span><b>I own or control the required rights.</b><small>I confirm I am authorized to use this metadata as creative direction and accept responsibility for the generated result.</small></span></label><button className="primary-action" disabled={!rights} onClick={generate}><Sparkles /> Generate style interpretation</button></div>}
+    {status === 'processing' && <div className="processing"><span className="orb"><WandSparkles /></span><h3>Generating a new interpretation</h3><p>Writing arrangement · Producing audio · Preparing candidates</p><div className="progress"><i /></div><small>This can take a few minutes. Keep this window open.</small></div>}
+    {status === 'error' && <div className="processing"><span className="error-orb"><X /></span><h3>Generation could not finish</h3><p className="remix-error" role="alert">{error}</p><div className="flex gap-2"><button className="secondary-action" onClick={() => setStatus('setup')}>Edit settings</button><button className="primary-action" onClick={generate}><Sparkles /> Retry</button></div></div>}
+    {status === 'done' && <div className="flex flex-col gap-4 p-5"><div className="result-art"><span><Check /></span><div><p>{candidates.length} INTERPRETATION{candidates.length === 1 ? '' : 'S'} READY</p><h3>{genre} · {direction}</h3><small>Original generations based on metadata only</small></div></div><div className="candidate-list">{candidates.map((candidate, index) => <article className="candidate" key={candidate.id}><div className="candidate-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><h3>{candidate.title}</h3><p>{formatDuration(candidate.duration)} · {candidate.status}</p></div></div>{candidate.audioUrl ? <><audio controls preload="none" src={candidate.audioUrl}>Your browser does not support audio playback.</audio><a className="secondary-action candidate-export" href={candidate.audioUrl} download target="_blank" rel="noreferrer">Export audio</a></> : <p className="remix-note">Audio is still processing. Retry generation if it does not become available.</p>}</article>)}</div><div className="flex gap-2"><button className="secondary-action flex-1" onClick={() => setStatus('setup')}>Adjust settings</button><button className="primary-action flex-1" onClick={generate}><Sparkles /> Generate again</button></div><p className="text-center text-[10px] text-muted-foreground">Unofficial Suno API integration. Review provider terms and music rights before distribution.</p></div>}
   </section></div>
 }
 
