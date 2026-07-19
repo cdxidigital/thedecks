@@ -7,8 +7,8 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'PulseMix AI — Performance OS',
-  description: 'An AI-native, cloud-connected professional DJ performance workstation.',
+  title: 'the decks by 4{music}2 — Performance OS',
+  description: 'A professional, AI-native DJ performance workstation by 4{music}2.',
   generator: 'v0.app',
 }
 
